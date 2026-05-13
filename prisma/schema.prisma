@@ -1,0 +1,125 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum RoleName {
+  ADMIN
+  EDITOR
+  VISUALIZADOR
+}
+
+enum EmpreendimentoStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum ImageKind {
+  GALLERY
+  FLOOR_PLAN
+}
+
+model Role {
+  id        String   @id @default(cuid())
+  name      RoleName @unique
+  label     String
+  users     User[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("roles")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  roleId       String
+  role         Role     @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Setting {
+  id                          String   @id @default(cuid())
+  homeTitle                   String
+  homeSubtitle                String
+  aboutTitle                  String
+  aboutText                   String
+  primaryButtonLabel          String
+  primaryButtonHref           String
+  secondaryButtonLabel        String
+  secondaryButtonHref         String
+  homeCarouselIntervalSeconds Int      @default(5)
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  @@map("settings")
+}
+
+model Contact {
+  id        String   @id @default(cuid())
+  phone     String
+  whatsapp  String
+  instagram String
+  email     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("contatos")
+}
+
+model Empreendimento {
+  id                         String               @id @default(cuid())
+  name                       String
+  slug                       String               @unique
+  status                     EmpreendimentoStatus @default(DRAFT)
+  shortDescription           String
+  fullDescription            String
+  conceptText                String?
+  commercialCalls            String?
+  technicalInfo              String?
+  institutionalTexts         String?
+  keyHighlights              String?
+  convenienceItems           String?
+  seoTitle                   String?
+  seoDescription             String?
+  location                   String
+  logoPath                   String?
+  logoDisplayDurationSeconds Int                  @default(3)
+  coverImagePath             String?
+  pdfPath                    String?
+  differentials              String?
+  publishedAt                DateTime?
+  images                     Image[]
+  createdAt                  DateTime             @default(now())
+  updatedAt                  DateTime             @updatedAt
+
+  @@index([status])
+  @@map("empreendimentos")
+}
+
+model Image {
+  id               String         @id @default(cuid())
+  empreendimentoId String
+  empreendimento   Empreendimento @relation(fields: [empreendimentoId], references: [id], onDelete: Cascade)
+  filePath         String
+  title            String
+  caption          String?
+  altText          String?
+  kind             ImageKind      @default(GALLERY)
+  sortOrder        Int            @default(0)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([empreendimentoId, sortOrder])
+  @@index([empreendimentoId, kind, sortOrder])
+  @@map("imagens")
+}

@@ -1,36 +1,139 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Construtora Forma Espaco
 
-## Getting Started
+Site institucional em Next.js com painel administrativo seguro, autenticao por perfil e banco com Prisma.
 
-First, run the development server:
+## Setup do projeto
+
+1. Copie o arquivo de ambiente:
+
+```bash
+cp .env.example .env
+```
+
+No Windows (PowerShell):
+
+```powershell
+Copy-Item .env.example .env
+```
+
+2. Rode o setup completo:
+
+```bash
+npm run setup
+```
+
+Esse comando executa:
+
+- `npm install`
+- `npx prisma migrate deploy`
+- `npx prisma db seed`
+
+3. Inicie em desenvolvimento:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Producao
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- As migracoes usam `prisma migrate deploy` (compativel com producao).
+- O seed e idempotente:
+  - nao duplica registros
+  - cria dados padrao apenas quando faltam
+  - nao sobrescreve edicoes existentes desnecessariamente
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Docker
 
-## Learn More
+1. Copie e ajuste as variaveis:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+cp .env.example .env
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Para SQLite no Docker, mantenha:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+DOCKER_DATABASE_URL="file:/app/prisma/data/prod.db"
+```
 
-## Deploy on Vercel
+2. Construa e suba a aplicacao:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+docker compose build
+docker compose up -d
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+3. Execute as migracoes e o seed dentro do container:
+
+```bash
+docker compose exec app npx prisma migrate deploy
+docker compose exec app npx prisma db seed
+```
+
+Com a configuracao de Tailscale deste projeto, o site local ficara em `http://localhost:3000/site`.
+
+## Acesso via Tailscale
+
+Endereco publico no tailnet:
+
+```text
+http://server-construtora.tailcb40f0.ts.net/site
+```
+
+Configure o `.env` do Docker com:
+
+```bash
+NEXTAUTH_URL="http://server-construtora.tailcb40f0.ts.net/site"
+BASE_URL="http://server-construtora.tailcb40f0.ts.net/site"
+NEXT_PUBLIC_SITE_URL="http://server-construtora.tailcb40f0.ts.net/site"
+```
+
+Rotas publicas:
+
+- `http://server-construtora.tailcb40f0.ts.net/site`
+- `http://server-construtora.tailcb40f0.ts.net/site/empreendimentos`
+- `http://server-construtora.tailcb40f0.ts.net/site/empreendimentos/<slug>`
+
+Admin:
+
+```text
+http://server-construtora.tailcb40f0.ts.net/site/admin/login
+```
+
+Somente dispositivos conectados ao Tailscale devem acessar o admin. O middleware bloqueia `/admin`, `/api/admin` e `/api/auth` quando a requisicao nao vem pelo host Tailscale derivado de `BASE_URL` ou pelos headers de identidade do Tailscale Serve. Login e RBAC continuam obrigatorios.
+
+Mantenha o Tailscale direcionando `/site` para a porta `3000` do container. O container continua escutando `0.0.0.0:3000`; para maior isolamento, mantenha firewall/VPN restringindo acesso direto a essa porta fora do Tailscale.
+
+### Volumes persistentes
+
+- `./public/uploads:/app/public/uploads` guarda imagens, logos e PDFs enviados pelo admin.
+- `./prisma-data:/app/prisma/data` guarda o banco SQLite usado pelo Docker.
+- `./postgres-data:/var/lib/postgresql/data` guarda os dados do Postgres quando o perfil `postgres` for usado.
+
+### Postgres opcional
+
+O `docker-compose.yml` inclui um servico Postgres opcional:
+
+```bash
+docker compose --profile postgres up -d db app
+```
+
+Configure `DOCKER_DATABASE_URL="postgresql://user:pass@db:5432/formaespaco"` para usar esse servico. Atencao: o schema Prisma atual esta com `provider = "sqlite"`; antes de usar Postgres em producao, gere/aplique migrations compativeis com Postgres.
+
+### Seguranca do admin
+
+Nao exponha `/admin` publicamente sem uma camada de protecao adicional. Para testes e homologacao, prefira firewall, VPN ou liberacao por IP.
+
+## Variaveis de ambiente
+
+Veja `.env.example`:
+
+- `DATABASE_URL`
+- `DOCKER_DATABASE_URL`
+- `NEXTAUTH_SECRET`
+- `NEXTAUTH_URL`
+- `BASE_URL`
+- `NEXT_PUBLIC_SITE_URL`
+- `ADMIN_TAILSCALE_HOSTS` (opcional para hosts Tailscale adicionais)
+- `INITIAL_ADMIN_EMAIL`
+- `INITIAL_ADMIN_PASSWORD`
