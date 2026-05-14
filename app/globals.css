@@ -1274,7 +1274,6 @@ h3 {
   opacity: 1;
   pointer-events: auto;
   will-change: opacity;
-  animation: overlay-fade-in 0.55s ease;
   transition: opacity 0.72s ease;
 }
 
@@ -1294,6 +1293,19 @@ h3 {
   pointer-events: none;
 }
 
+.empreendimento-logo-overlay.is-loading {
+  animation: overlay-loading-timeout 0.18s ease 5s forwards;
+}
+
+.empreendimento-logo-overlay-probe {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
 .empreendimento-logo-overlay-backdrop {
   position: absolute;
   inset: 0;
@@ -1304,6 +1316,8 @@ h3 {
   transform: scale(1.08);
   filter: blur(24px) brightness(0.48) saturate(1.2);
   z-index: 0;
+  opacity: 0;
+  animation: overlay-image-reveal 0.28s ease forwards;
 }
 
 .empreendimento-logo-overlay-veil {
@@ -1326,6 +1340,8 @@ h3 {
   object-fit: cover;
   object-position: center;
   filter: saturate(1.05) contrast(1.03);
+  opacity: 0;
+  animation: overlay-image-reveal 0.28s ease forwards;
 }
 
 .empreendimento-logo-overlay-image.is-raster {
@@ -1336,7 +1352,15 @@ h3 {
   filter: saturate(1.02) contrast(1.02);
 }
 
-@keyframes overlay-fade-in {
+@keyframes overlay-loading-timeout {
+  to {
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+  }
+}
+
+@keyframes overlay-image-reveal {
   from {
     opacity: 0;
   }
@@ -1971,7 +1995,16 @@ h3 {
   }
 
   .empreendimento-logo-overlay {
-    animation: none;
     transition: none;
+  }
+
+  .empreendimento-logo-overlay.is-loading {
+    animation-duration: 1ms;
+  }
+
+  .empreendimento-logo-overlay-backdrop,
+  .empreendimento-logo-overlay-image {
+    animation: none;
+    opacity: 1;
   }
 }

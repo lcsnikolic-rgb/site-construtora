@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { publicPath } from "@/lib/paths";
 
 type HeroSlide = {
@@ -23,40 +23,90 @@ function normalizeIntervalSeconds(value: number) {
   return Math.min(60, Math.max(1, Math.trunc(value || 5)));
 }
 
+const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
+
+function subscribeToHydration(onStoreChange: () => void) {
+  const timer = window.setTimeout(onStoreChange, 0);
+  return () => window.clearTimeout(timer);
+}
+
+function getHydratedSnapshot() {
+  return true;
+}
+
+function getServerHydratedSnapshot() {
+  return false;
+}
+
+function getReducedMotionSnapshot() {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return false;
+  }
+
+  return window.matchMedia(reducedMotionQuery).matches;
+}
+
+function getServerReducedMotionSnapshot() {
+  return false;
+}
+
+function subscribeToReducedMotion(onStoreChange: () => void) {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return () => {};
+  }
+
+  const mediaQuery = window.matchMedia(reducedMotionQuery);
+
+  if (typeof mediaQuery.addEventListener === "function") {
+    mediaQuery.addEventListener("change", onStoreChange);
+    return () => mediaQuery.removeEventListener("change", onStoreChange);
+  }
+
+  mediaQuery.addListener(onStoreChange);
+  return () => mediaQuery.removeListener(onStoreChange);
+}
+
 export function HeroCarousel({ title, subtitle, slides, intervalSeconds }: HeroCarouselProps) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const [shouldReduceMotion, setShouldReduceMotion] = useState(false);
+  const hasHydrated = useSyncExternalStore(
+    subscribeToHydration,
+    getHydratedSnapshot,
+    getServerHydratedSnapshot,
+  );
+  const shouldReduceMotion = useSyncExternalStore(
+    subscribeToReducedMotion,
+    getReducedMotionSnapshot,
+    getServerReducedMotionSnapshot,
+  );
   const autoplayTimerRef = useRef<number | null>(null);
   const isDev = process.env.NODE_ENV !== "production";
   const autoplayIntervalMs = normalizeIntervalSeconds(intervalSeconds) * 1000;
 
   const clearAutoplayTimer = useCallback(() => {
     if (autoplayTimerRef.current !== null) {
-      window.clearInterval(autoplayTimerRef.current);
+      window.clearTimeout(autoplayTimerRef.current);
       autoplayTimerRef.current = null;
     }
   }, []);
 
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const updateMotionPreference = () => {
-      setShouldReduceMotion(mediaQuery.matches);
-    };
-
-    updateMotionPreference();
-
-    if (typeof mediaQuery.addEventListener === "function") {
-      mediaQuery.addEventListener("change", updateMotionPreference);
-      return () => mediaQuery.removeEventListener("change", updateMotionPreference);
-    }
-
-    mediaQuery.addListener(updateMotionPreference);
-    return () => mediaQuery.removeListener(updateMotionPreference);
+  const selectSlide = useCallback((index: number) => {
+    setActiveIndex(Math.max(0, index));
   }, []);
+
+  useEffect(() => {
+    if (isDev && hasHydrated) {
+      console.debug("[HeroCarousel] hidratado", {
+        slides: slides.length,
+        autoplayIntervalMs,
+      });
+    }
+  }, [autoplayIntervalMs, hasHydrated, isDev, slides.length]);
+
+  useEffect(() => {
+    if (isDev) {
+      console.debug("[HeroCarousel] prefers-reduced-motion", shouldReduceMotion);
+    }
+  }, [isDev, shouldReduceMotion]);
 
   useEffect(() => {
     if (isDev) {
@@ -73,9 +123,10 @@ export function HeroCarousel({ title, subtitle, slides, intervalSeconds }: HeroC
   useEffect(() => {
     clearAutoplayTimer();
 
-    if (slides.length <= 1 || shouldReduceMotion) {
+    if (!hasHydrated || slides.length <= 1 || shouldReduceMotion) {
       if (isDev) {
         console.debug("[HeroCarousel] autoplay desativado", {
+          hydrated: hasHydrated,
           slides: slides.length,
           reducedMotion: shouldReduceMotion,
         });
@@ -83,7 +134,7 @@ export function HeroCarousel({ title, subtitle, slides, intervalSeconds }: HeroC
       return;
     }
 
-    autoplayTimerRef.current = window.setInterval(() => {
+    autoplayTimerRef.current = window.setTimeout(() => {
       setActiveIndex((current) => (current + 1) % slides.length);
     }, autoplayIntervalMs);
 
@@ -92,7 +143,15 @@ export function HeroCarousel({ title, subtitle, slides, intervalSeconds }: HeroC
     }
 
     return clearAutoplayTimer;
-  }, [autoplayIntervalMs, clearAutoplayTimer, isDev, shouldReduceMotion, slides.length]);
+  }, [
+    activeIndex,
+    autoplayIntervalMs,
+    clearAutoplayTimer,
+    hasHydrated,
+    isDev,
+    shouldReduceMotion,
+    slides.length,
+  ]);
 
   if (slides.length === 0) {
     return (
@@ -112,7 +171,11 @@ export function HeroCarousel({ title, subtitle, slides, intervalSeconds }: HeroC
   const activeSlide = slides[safeActiveIndex];
 
   return (
-    <section className="hero">
+    <section
+      className="hero"
+      data-carousel-autoplay={hasHydrated && slides.length > 1 && !shouldReduceMotion ? "on" : "off"}
+      data-carousel-hydrated={hasHydrated ? "true" : "false"}
+    >
       <div className="hero-image-wrap" aria-hidden="true">
         {slides.map((slide, index) => (
           <div
@@ -124,7 +187,7 @@ export function HeroCarousel({ title, subtitle, slides, intervalSeconds }: HeroC
               alt=""
               fill
               sizes="100vw"
-              priority={index === 0}
+              preload={index === 0}
               className="hero-image"
             />
           </div>
@@ -154,7 +217,7 @@ export function HeroCarousel({ title, subtitle, slides, intervalSeconds }: HeroC
                   aria-selected={index === safeActiveIndex}
                   aria-label={`Imagem ${index + 1}`}
                   className={index === safeActiveIndex ? "is-active" : ""}
-                  onClick={() => setActiveIndex(index)}
+                  onClick={() => selectSlide(index)}
                 />
               ))}
             </div>

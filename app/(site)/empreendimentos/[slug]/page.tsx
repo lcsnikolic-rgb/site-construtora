@@ -245,7 +245,6 @@ export default async function EmpreendimentoPage({ params }: PageProps) {
         <EmpreendimentoLogoOverlay
           key={`${empreendimento.slug}-${logoPath}`}
           logoPath={logoPath}
-          alt={empreendimento.name}
           durationSeconds={empreendimento.logoDisplayDurationSeconds}
         />
       ) : null}

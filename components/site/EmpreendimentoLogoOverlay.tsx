@@ -6,7 +6,6 @@ import { publicPath } from "@/lib/paths";
 
 type EmpreendimentoLogoOverlayProps = {
   logoPath: string;
-  alt: string;
   durationSeconds: number;
 };
 
@@ -18,7 +17,6 @@ function normalizeDurationSeconds(value: number) {
 
 export function EmpreendimentoLogoOverlay({
   logoPath,
-  alt,
   durationSeconds,
 }: EmpreendimentoLogoOverlayProps) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
@@ -27,6 +25,7 @@ export function EmpreendimentoLogoOverlay({
   const isVector = logoPath.toLowerCase().endsWith(".svg");
   const resolvedLogoPath = publicPath(logoPath);
   const hasHiddenRef = useRef(false);
+  const hasResolvedLogo = Boolean(resolvedLogoPath);
 
   const hideOverlay = useCallback(() => {
     if (hasHiddenRef.current) return;
@@ -36,22 +35,29 @@ export function EmpreendimentoLogoOverlay({
 
   useEffect(() => {
     if (!resolvedLogoPath) {
+      hideOverlay();
       return;
     }
 
     let isActive = true;
     const image = new window.Image();
+    image.decoding = "async";
+
+    if ("fetchPriority" in image) {
+      image.fetchPriority = "high";
+    }
+
     const loadWatchdogTimer = window.setTimeout(() => {
       if (!isActive) return;
       setLoadState("failed");
       hideOverlay();
-    }, 4500);
+    }, 4000);
 
     image.onload = () => {
       if (!isActive) return;
       window.clearTimeout(loadWatchdogTimer);
 
-      if (image.naturalWidth > 0 && image.naturalHeight > 0) {
+      if (isVector || (image.naturalWidth > 0 && image.naturalHeight > 0)) {
         setLoadState("ready");
         return;
       }
@@ -75,7 +81,7 @@ export function EmpreendimentoLogoOverlay({
       image.onload = null;
       image.onerror = null;
     };
-  }, [hideOverlay, resolvedLogoPath]);
+  }, [hideOverlay, isVector, resolvedLogoPath]);
 
   useEffect(() => {
     if (loadState !== "ready" || isHidden) {
@@ -115,35 +121,57 @@ export function EmpreendimentoLogoOverlay({
     }
   }
 
-  if (isHidden || loadState !== "ready") return null;
+  if (!hasResolvedLogo || isHidden) return null;
 
   return (
     <div
-      className={`empreendimento-logo-overlay ${isLeaving ? "is-leaving" : ""}`}
+      className={[
+        "empreendimento-logo-overlay",
+        loadState === "ready" ? "is-ready" : "is-loading",
+        isLeaving ? "is-leaving" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       aria-hidden="true"
       onTransitionEnd={handleTransitionEnd}
     >
-      <Image
-        src={resolvedLogoPath}
-        alt=""
-        fill
-        sizes="100vw"
-        className="empreendimento-logo-overlay-backdrop"
-        loading="eager"
-        unoptimized={isVector}
-        onError={hideOverlay}
-      />
+      {loadState === "loading" ? (
+        <Image
+          src={resolvedLogoPath}
+          alt=""
+          width={1}
+          height={1}
+          className="empreendimento-logo-overlay-probe"
+          loading="eager"
+          unoptimized
+          onError={hideOverlay}
+        />
+      ) : null}
+      {loadState === "ready" ? (
+        <Image
+          src={resolvedLogoPath}
+          alt=""
+          fill
+          sizes="100vw"
+          className="empreendimento-logo-overlay-backdrop"
+          loading="eager"
+          unoptimized
+          onError={hideOverlay}
+        />
+      ) : null}
       <div className="empreendimento-logo-overlay-veil" />
-      <Image
-        src={resolvedLogoPath}
-        alt={alt}
-        fill
-        sizes="100vw"
-        className={`empreendimento-logo-overlay-image ${isVector ? "is-vector" : "is-raster"}`}
-        preload
-        unoptimized={isVector}
-        onError={hideOverlay}
-      />
+      {loadState === "ready" ? (
+        <Image
+          src={resolvedLogoPath}
+          alt=""
+          fill
+          sizes="100vw"
+          className={`empreendimento-logo-overlay-image ${isVector ? "is-vector" : "is-raster"}`}
+          loading="eager"
+          unoptimized
+          onError={hideOverlay}
+        />
+      ) : null}
     </div>
   );
 }

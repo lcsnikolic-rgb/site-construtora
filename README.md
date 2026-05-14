@@ -104,6 +104,38 @@ Somente dispositivos conectados ao Tailscale devem acessar o admin. O middleware
 
 Mantenha o Tailscale direcionando `/site` para a porta `3000` do container. O container continua escutando `0.0.0.0:3000`; para maior isolamento, mantenha firewall/VPN restringindo acesso direto a essa porta fora do Tailscale.
 
+## Tunel publico com basePath `/site`
+
+O build do Next.js usa `basePath` em tempo de build. Se `BASE_URL`/`NEXT_PUBLIC_SITE_URL` apontam para uma URL com `/site`, o tunel ou proxy publico precisa encaminhar as requisicoes mantendo esse prefixo.
+
+Rotas que precisam passar intactas para o app:
+
+- `/site`
+- `/site/_next/static/...`
+- `/site/_next/image?...`
+- `/site/uploads/...`
+- `/site/brand/...`
+
+Exemplo NGINX mantendo o caminho original:
+
+```nginx
+location = /site {
+  proxy_pass http://127.0.0.1:3000;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}
+
+location /site/ {
+  proxy_pass http://127.0.0.1:3000;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}
+```
+
+Se o HTML abrir no dominio publico mas componentes client-side nao hidratarem, verifique no Network se os chunks em `/site/_next/static/...` retornam JavaScript com status `200`. Um chunk retornando HTML, `404`, `403` ou caminho sem `/site` impede o carrossel da home de iniciar.
+
 ### Volumes persistentes
 
 - `./public/uploads:/app/public/uploads` guarda imagens, logos e PDFs enviados pelo admin.
